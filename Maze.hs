@@ -82,6 +82,12 @@ createMazeByPrim width height = do
         unless nextVisited $
           createMaze rightWalls bottomWalls visited toCell (take i walls ++ drop (i + 1) walls ++ [(toCell, n) | n <- neighbours toCell width height, n /= fromCell])
 
+-- I believe we can optimize the line 83 by adding only unvisited neighbours like the following
+-- However, I cannot filter out since the values are in the mutable array, which makes the performance of the Prim's algorithm really bad
+
+-- getUnvisitedNeighbours :: MazeGrid -> [(Int, Int)] -> [(Int, Int)]
+-- getUnvisitedNeighbours visited ns = [n | n <- ns, not (readArray visited n)]
+
 
 printMaze :: Maze -> IO ()
 printMaze ((width, height), start, goal, rightWalls, bottomWalls) = do
