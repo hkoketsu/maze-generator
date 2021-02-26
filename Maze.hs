@@ -8,32 +8,33 @@ import Data.Array.MArray ()
 import Control.Monad ( unless, forM_ )
 import Control.Monad.ST ()
 
+type MazeGrid = IOArray (Int, Int) Bool
 
 type Maze = (
-        (Int, Int),
-        (Int, Int), 
-        (Int, Int), 
-        IOArray (Int, Int) Bool, 
-        IOArray (Int, Int) Bool
+        (Int, Int), -- width, height
+        (Int, Int), -- start
+        (Int, Int), -- goal
+        MazeGrid,   -- right walls
+        MazeGrid    -- bottom walls
     )
 
 
-createMaze :: Int -> Int -> IO Maze
-createMaze width height = do
-    rightWalls  <- mazeGrid True
-    bottomWalls <- mazeGrid True
-    visited     <- mazeGrid False
+createMazeByDFS :: Int -> Int -> IO Maze
+createMazeByDFS width height = do
+    rightWalls  <- createMazeGrid width height True
+    bottomWalls <- createMazeGrid width height True
+    visited     <- createMazeGrid width height False
 
     start <- getStartPoint width height
 
-    createMazeByDfs rightWalls bottomWalls visited start
+    createMaze rightWalls bottomWalls visited start
 
     let goal = (width-1 - (fst start), height-1 - (snd start))
 
     return ((width, height), start, goal, rightWalls, bottomWalls)
 
     where
-        createMazeByDfs rightWalls bottomWalls visited here = do
+        createMaze rightWalls bottomWalls visited here = do
             writeArray visited here True
             let ns = neighbours here width height
             i <- randomRIO (0, length ns - 1)
@@ -46,10 +47,40 @@ createMaze width height = do
                 unless nextVisited $
                   writeArray (if x1 == x2 then bottomWalls else rightWalls) (min x1 x2, min y1 y2) False
                 unless nextVisited $
-                  createMazeByDfs rightWalls bottomWalls visited next
-        
-        mazeGrid = newArray ((0, 0), (width-1, height-1)) :: Bool -> IO (IOArray (Int, Int) Bool)
+                  createMaze rightWalls bottomWalls visited next
 
+
+createMazeByPrim :: Int -> Int -> IO Maze
+createMazeByPrim width height = do
+    rightWalls  <- createMazeGrid width height True
+    bottomWalls <- createMazeGrid width height True
+    visited     <- createMazeGrid width height False
+
+    start <- getStartPoint width height
+
+    createMaze rightWalls bottomWalls visited start [(start, n) | n <- neighbours start width height]
+
+    let goal = (width-1 - (fst start), height-1 - (snd start))
+
+    return ((width, height), start, goal, rightWalls, bottomWalls)
+
+    where
+        createMaze rightWalls bottomWalls visited here walls = do
+          writeArray visited here True
+          i <- randomRIO (0, length walls - 1)
+          forM_ (walls !! i : take i walls ++ drop (i + 1) walls) $ \nextWall -> do
+            let fromCell = fst nextWall
+            let toCell = snd nextWall
+            nextVisited <- readArray visited toCell
+            let x1 = fst fromCell
+            let y1 = snd fromCell
+            let x2 = fst toCell
+            let y2 = snd toCell
+            
+            unless nextVisited $
+              writeArray (if x1 == x2 then bottomWalls else rightWalls) (min x1 x2, min y1 y2) False
+            unless nextVisited $
+              createMaze rightWalls bottomWalls visited toCell (take i walls ++ drop (i + 1) walls ++ [(toCell, n) | n <- neighbours toCell width height, n /= fromCell])
 
 
 printMaze :: Maze -> IO ()
@@ -76,7 +107,8 @@ printMaze ((width, height), start, goal, rightWalls, bottomWalls) = do
       putStrLn "+"
 
 
-
+createMazeGrid :: Int -> Int -> Bool -> IO MazeGrid
+createMazeGrid width height b = newArray ((0, 0), (width-1, height-1)) b :: IO MazeGrid
 
 getStartPoint :: Int -> Int -> IO (Int, Int)
 getStartPoint w h = do
